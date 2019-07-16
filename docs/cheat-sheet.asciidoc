@@ -1,0 +1,1415 @@
+= Creating Programming Languages For Fun (and maybe profit)
+
+OSCON 2019 Tutorial
+
+== Tarsier
+
+Today we'll be making the latest and greatest programming language, Tarsier.
+Tarsier has some of the modern features you know and love in programming languages, and is also missing a *whole* lot you'll be expecting because we've only got a few hours.
+
+=== Basic Structure
+
+A Tarsier program is one or more statements, statements can be any of assignments, conditionals, or functions.
+Each statement is terminated by the end of the line, no need for superfluous `;` in Tarsier!
+
+=== Assignments
+
+Assignment statements take the form of the name of the variable, followed by the assignment operator, followed by the value you want assigned to the variable.
+A normal assignment will look something like the following:
+
+----
+variable : 5
+----
+
+Tarsier supports the entire gamut of numbers, including integers (actually only integers), as the values which can be assigned into variables.
+Additionally you'll be able to store the result of expressions into variables.
+So the following code will work fine in Tarsier:
+
+----
+variable : 1 + 1
+----
+
+==== Expressions
+
+Expressions allow you to do maths.
+The different types of maths allowed are addition, subtraction, multiplication, and division.
+Expressions take the form of a left and right side equation separated by a single operator.
+The following are all valid expressions in Tarsier:
+
+----
+1 + 1
+1 * 3
+5 - 3
+4 / 2
+----
+
+Tarsier even supports parentheses and nesting expressions!
+
+----
+2 * (3 - 1)
+----
+
+=== Functions
+
+Functions will have their name, and zero or more comma separated parameters inside of parentheses.
+The following are some different options for function assignments inside Tarsier:
+
+----
+doStuff()
+doStuffWithParameters(variable, anotherVariable)
+----
+
+=== Conditionals
+
+Every program needs conditionals, Tarsier has `if` support.
+Each if has a non-optional code block which will be broken up by non-optional `{` and `}`.
+
+----
+if variable < 10
+{
+    doStuff()
+}
+----
+
+We are enforcing the use of braces because hey we don't want Tarsier to be responsible for another gotofail bug!
+As the braces are required we won't care about the white space of the expression.
+
+----
+if variable < 10 {
+    doStuff()
+}
+----
+
+[WARNING]
+====
+Please don't use Tarsier for anything secure, pretty please?
+====
+
+Tarsier also has an optional `else` component that works very similar to the `if` but there is no `else-if` support.
+
+----
+if variable < 10
+{
+    doStuff()
+}
+else
+{
+    doOtherStuff()
+}
+----
+
+==== Boolean Expressions
+
+Boolean expressions will work in a manner pretty similar to our maths expressions.
+There will be a left and right component separated by an operator.
+Tarsier supports, less-than, greater-than, and equality operators.
+The following are all valid boolean expressions in Tarsier:
+
+----
+variable < 10
+variable > 10
+variable = 10
+variable = 1 + anotherVariable
+----
+
+[WARNING]
+====
+Boolean expressions in Tarsier can only exist in the context of a conditional statement, you can't have them existing in isolation.
+====
+
+=== Variable and Function Names
+
+Variables and functions both use the same naming scheme, Tarsier supports camelCase, PascalCase, and kebab-case, or mixing and matching them.
+So variables must start with an `a-z` or `A-Z` character and then zero or more of upper or lower case `a-z` or the `-` character.
+The following are valid variable or function names in Tarsier:
+
+----
+a-Great-variable
+aGreatVariable
+AGreatVariable
+----
+
+but `-a-great-variable-` is not valid because it starts with a `-`.
+
+=== Comments
+
+Finally Tarsier also supports single line comments using the `//` operator to signal the start of the comment and run to the end of that line.
+
+== Parser Basics
+
+Parsing is the process by where a string of characters is analysed and converted into a parse tree for later use based on some predefined rules for how the resulting tree should exist.
+A parser is the program which does the parsing.
+While there are generally two distinct steps in parsing, lexing (or tokenising) and parsing the terms are generally bound up into one program or build process called the parser.
+This is also often integrated directly into the compiler or interpreter which make something practical out of the parse tree.
+
+=== Tokenising and Lexers
+
+The first step is to lex or tokenise the input string.
+This goes through the input one symbol at a time and matches various characters according to rules (also called consuming the stream) and adds these to a stream of tokens.
+Take the following snippet of Tarsier code:
+
+----
+variable : 5
+----
+
+Assuming we've got a grammar that can lex Tarsier we'd get a token stream out the other end that would look something like the following:
+
+----
+ID ASSIGNMENT_OPERATOR INT
+----
+
+The complexity of the tokens that the lexer can understand vary depending on the tool being used.
+ANTLR can look as far ahead as necessary to complete a token but some tools can only look ahead a fixed number of symbols at a time.
+I like to think of the lexer as a machine having a conversation with itself to match rules by gobbling up characters one at a time.
+So in our above example the lexer would be going:
+
+*hey I've got a `v` what's that match?*
+
+*that matches the `ID` rule*
+
+*cool, well now I have an `a`, what about that?*
+
+*still part of the previous `ID` of `v`*
+
+*uh huh, gotcha, and now I have an `r`*
+
+*yep, still `ID`, part of the `va`*
+
+_many steps later_
+
+*well now I've got a space*
+
+*ok so the `ID` of `variable` is done, dump that `ID` into our list of tokens*
+
+*alright so now I have a `:`*
+
+*well that is an `ASSIGNMENT_OPERATOR`*
+
+_and so on and so forth_
+
+[NOTE]
+====
+So far we've been using the term token, depending on what material you've read before you might have also seen terminal also being used in a similar manner.
+A terminal is the output of consuming tokens, so in the above example the token *variable* became the terminal *ID* and the token *:* became terminal *ASSIGNMENT_OPERATOR*.
+With that in mind the terms are often used interchangeably and we will likely do so during the tutorial, sorry.
+====
+
+After the lexing stage has finished the parser takes over.
+
+[WARNING]
+====
+As a general rule the lexer should always completely consume all characters in the input and convert them fully into tokens.
+Missing symbols will make debugging your grammars harder.
+====
+
+=== Parsing
+
+Once you've got a stream of tokens from the lexer the next step is fairly similar, it is to match up various tokens into statements that get assembled together into a parse tree.
+The parse tree is the final step and this tree is used by other parts to actually make the language **do** something.
+So our end result of taking a simple piece of code, such as `variable : 5` becomes:
+
+image::basic-tree.png[Basic Parse Tree]
+
+In this case we have the top level of our tree is a `program`, below that we have a single `statement` child node in this case it is an `assignment_statement`.
+The `assignment_statement` itself has several child nodes; an `ID`, a dedicated assignment character `:`, then an `expression` statement which itself holds an `INT` as a child node before finally concluding with a `NEWLINE`.
+When it comes time to use this parse tree you can walk the tree in a left-to-right depth-first fashion as this nearly always matches the structure of your code.
+
+[WARNING]
+====
+We say nearly always because plenty of times you need the result of a further away node, especially in the case of maths.
+`2 * 3 + 5 is not the same as 2 * (3 + 5)` and you'll need to worry about that.
+====
+
+== ANTLR
+
+ANTLR (Another Tool For Language Recognition) is an open source parser generator that uses a Context-Free Grammar (CFG) to generate a lexer and parser that matches input according to the grammar, or throw errors that the input *doesn't* match the rules of the grammar.
+
+ANTLR has been around for a while, the current major version is 4 and is flexible enough to handle pretty much any programming language or textual data format you can imagine.
+One of the main strengths of ANTLR is it supports a range of different output target languages.
+ANTLR supports outputting parser code in:
+
+- Java (default)
+- C#
+- Python 2
+- Python 3
+- JavaScript
+- Go
+- C++
+- Swift
+
+So if you know you will need your new language to be integrated into those languages it already has a leg up on its opposition.
+ANTLR has its own custom CFG to define its rules and shares a very similar set of rules for grammar for both lexer and parser rules as well as support for controlling and overriding the lexing and parsing when necessary.
+
+[NOTE]
+====
+Because ANTLR supports all of these different output languages you might be tempted to do the tutorial in your preferred language.
+We don't really recommend that today as it means we probably can't help with any issues that arise, but if you really want to we won't stop you.
+====
+
+=== Installing ANTLR
+
+First grab the tutorial files from *blah*.
+This has the test files for ANTLR but also everything we need for the tutorial so might as well grab it all now.
+
+==== Traditional Way
+
+. Install Java (you should have already done this)
+. Download and install https://www.antlr.org/download/antlr-4.7.2-complete.jar to somewhere you can run and link to it
+. Export a CLASSPATH to point to your ANTLR install
+
+macOS and Linux:
+
+----
+export CLASSPATH=".:/place/you/put/antlr/antlr-4.7.2-complete.jar:$CLASSPATH"
+----
+
+Windows:
+
+----
+SET CLASSPATH=.;C:\PATH\YOU\PUT\antlr-4.7.2-complete.jar;%CLASSPATH%
+----
+
+[start=4]
+. Set up an alias to ANTLR
+
+macOS and Linux:
+
+----
+alias antlr4='java -jar /place/you/put/antlr/antlr-4.7.2-complete.jar'
+----
+
+Windows:
+
+----
+doskey antlr4=java org.antlr.v4.Tool $*
+----
+
+==== Testing ANTLR
+
+Once installed we need to do a quick check to make sure ANTLR is hooked up correctly.
+
+. Set up an alias to the test rig (optional but recommended)
+
+macOS and Linux:
+
+----
+alias testrig='java org.antlr.v4.gui.TestRig'
+----
+
+Windows:
+
+----
+doskey testrig =java org.antlr.v4.gui.TestRig $*
+----
+
+[start=2]
+. Navigate to the folder you downloaded the test tiles into.
+. Run ANTLR over the test grammar to export Java files for the test grammar.
+
+----
+antlr4 TestGrammar.g4
+----
+
+[start=4]
+. Compile the exported java parser code
+
+----
+javac TestGrammar*.java
+----
+
+[start=5]
+. Run the testing rig
+
+----
+testrig TestGrammar entry -gui testinput.txt
+----
+
+Afterwards you should see the tree output similar to the below:
+
+image::testrig.png[Test Rig Output]
+
+If you don't see this something has gone wrong with the ANTLR install and setup.
+This is going to be the main way you can test your grammars so make sure it works.
+
+[TIP]
+====
+Most of the time when ANTLR breaks it is due to the classpath being incorrectly set.
+====
+
+==== The Way of Docker
+
+There are also more than a few docker images for ANTLR such as https://hub.docker.com/r/petervaczi/antlr or https://hub.docker.com/r/leodido/antlr.
+Feel free to use either of these, or another that you've found or built yourself, if that fits better into your workflow.
+
+==== The VSCode ANTLR Plugin
+
+There is a truly fantastic ANTLR plugin for VSCode that you can use an alternative to the test rig we just set up (although it is good to have that as well).
+I'll be using that throughout the tutorial because it means less swapping back and forth between terminal and VSCode and frankly it looks nicer.
+It still requires Java and ANTLR installed it just takes over the role of the testrig.
+Assuming you've got java, ANTLR, and the plugin installed there are a couple of other steps you need to follow to use the plugin.
+
+[TIP]
+====
+The command `code --install-extension mike-lischke.vscode-antlr4` will install the correct extension.
+====
+
+To do that we'll need a launch configuration
+
+. Open the debugger window in VSCode
+. Click on the cog at the top of the debugger
+. Select a new "Node.js" launch configuration
+. Replace the contents with the following:
+
+[source,json]
+----
+{
+    "version": "2.0.0",
+    "configurations": [
+        {
+            "name": "antlr4",
+            "type": "antlr-debug",
+            "request": "launch",
+            "input": "INPUTFILE",
+            "grammar": "GRAMMARFILE",
+            "startRule": "ENTRYPOINT",
+            "printParseTree": true,
+            "visualParseTree": true
+        }
+    ]
+}
+----
+
+[start=5]
+. Replace INPUTFILE, GRAMMARFILE, and ENTRYPOINT with their appropriately named equivalents.
+For the test grammar and file this is `testinput.txt`, `TestGrammar.g4`, and `entry` respectively.
+
+[start=6]
+. If you ran the testrig or exported antlr4 code first, make sure to delete the files it created
+. Press F5 to debug run the debug configuration.
+
+image::testrig-vscode.png[VSCode Plugin Test Output]
+
+Not only in my opinion does this look nicer and it means we'll have to do less window switching to test our grammar as we build it, the plugin has a whole bunch of other really nice little features to help during debugging or for your own curiosity.
+It can generate railroad diagrams of rules:
+
+image::vscode-railroad.png[VSCode Plugin Railroad Diagram]
+
+A call graph for the grammar:
+
+image::vscode-callgraph.png[VSCode Plugin Call Graph]
+
+As well as augmented transition network (ATN) graph for rules:
+
+image::vscode-atn.png[VSCode Plugin ATN Graph]
+
+=== ANTLR CFG
+
+CFGs are a series of language grammars first formalised by Noam Chomsky based on a collection of related work originally for aiding in understanding natural languages.
+They are called context-free because the rules that comprise them can be applied without needing the context of the surrounding text, this has some impacts on their use in natural languages but works pretty much perfectly for computer languages and data structures.
+While there are numerous different CFGs out there they all tend to share a lot of commonality with Extended Backus-Naur Form CFG which was created to standardise the various formal grammars.
+ANTLR uses its own CFG that is very similar to EBNF because as with all things standards related https://xkcd.com/927/[XKCD] applies but if you are interested in reading about CFGs EBNF is a good starting point and similar enough to everything out there to still be useful.
+
+ANTLR uses the same grammar for both lexer and parser rules, only difference is lexer rules start with upper case names and parser rules start with lower case names.
+Rules start with a name, then a colon and then the symbols or terminals which make up the rule and then end with a semi-colon to close off the rule.
+Symbols are encapsulated inside single-quotes `'symbols go here'` regardless of how long the token is.
+All rules in ANTLR therefore look pretty much the same:
+
+----
+ASSIGNMENT_OPERATOR : ':' ;
+----
+
+This lexer rule would create a new terminal called `ASSIGNMENT_OPERATOR` that matches the symbol `:`.
+Because manually specifying individual rules character by character would take forever ANTLR supports some convenience operators that are remarkably similar to what you get with regex.
+You can define a range of characters using the `[]` set operator:
+
+----
+INT : [0-9] ;
+----
+
+This defines a new lexer rule that matches any individual character in the range of 0-9 (so 0,1,2,3,4,5,6,7,8,9) and emits an `INT` terminal for it.
+This rule isn't really that useful as rarely do you want to match `15` as two separate ints of `1` and `5` so we use the one or more operator `+` on the set:
+
+----
+INT : [0-9]+ ;
+----
+
+This says an `INT` is anything that has one or more of the symbols 0,1,2,3,4,5,6,7,8,9.
+There is also the zero or more operators `*` which works in the same manner.
+
+[NOTE]
+====
+Lexer rules don't *have* to be all upper case but I normally always keep them upper case so I can more easily eyeball them.
+They only need to start with an upper case sybmol, it is up to you if you want them to be fully upper case or not.
+====
+
+ANTLR also supports building up rules out of other rules, so another way you could get the same result as the above would be to change your rules into the following:
+
+----
+NUM : [0-9] ;
+INT : NUM+ ;
+----
+
+While this particular example is a little silly it does show you can break up your rules into subrules.
+This becomes more useful when you start having more complex rules or multiple ways of representing the same concept.
+For example if we wanted to add in floats to Tarsier it still makes sense to have a generic `NUMBER` terminal that holds either ints or floats.
+
+----
+NUMBER : FLOAT | INT ;
+FLOAT : [0-9]+ '.' [0-9]+ ;
+INT : [0-9]+ ;
+----
+
+Here we've got a `NUMBER` that can be either an `INT` or a `FLOAT` but not both, this is determined by the logical or operator `|`.
+
+Sets can also be negated using the `~` operator for when you know what you need something to *not* be:
+
+----
+NOT_A_NUM : ~[0-9] ;
+----
+
+This would match literally any symbol that isn't `0,1,2,3,4,5,6,7,8,9`.
+
+[WARNING]
+====
+You can't chain together matching negation, so a rule of `~[aa]` wouldn't work.
+What this is saying is you want the set of everything that isn't `aa`.
+
+First of all the set containing the values `a` and `a` isn't a valid set, each element in a set has to be unique.
+But even if you are ok to throw out the rules of set theory (I'm certainly not), there are other problems with this.
+ANTLR (and most parsers) only look at one symbol at a time, so how could any symbol ever match two?
+But there is another issue even if you told ANTLR to look at two symbols at a time and threw set theory into the bin.
+
+To make a set which matches not `aa` the set you are comparing against would have to be infinitely big (or if you are ok with a less than perfect answer, at least as big as the square of the input) to represent everything that isn't `aa`.
+This would be an *enormous* set to check against and generate.
+Even if you just wanted to limit it to tokens the same length of the negated set it is still huge, even further constrained to lowercase a-z you are talking about 676 cases and ANTLR can't know you want it constrained to lowercase a-z.
+====
+
+==== The Third Cardinal Sin
+
+ANTLR uses a greedy top-down approach to matching rules, this is to help smooth out any ambiguity in your grammar.
+This means it prefers to match the longest rule it can, and then follows rules in order after that.
+For example say you *really* need to know about the number `15` because for some reason it is *super* important to you can define a new rule:
+
+----
+FIFTEEN : '15' ;
+----
+
+But this causes an ambiguity as `15` also matches to `INT`.
+So if you want the `FIFTEEN` rule to ever be matched it will have to go above the `INT` rule.
+
+----
+FIFTEEN : '15' ;
+INT : [0-9]+ ;
+----
+
+This means if your input was `1 15 155` you'd get back `INT FIFTEEN INT`, the `155` doesn't become `FIFTEEN INT` because `155` matches into `INT` as well `FIFTEEN` but because the rules are greedy and `155` consumes more symbols it gets preference.
+
+==== Parser Rules
+
+Parsing rules work identically to the above lexing rules we've seen but with some tiny differences.
+While they follow the same basic syntax parser rules must start as lower case.
+Additionally parsers only operate on the terminals, the already lexed text, or other parser rules.
+So our assignment statement parse rule would become:
+
+----
+assignment_statement : ID ASSIGNMENT_OPERATOR expression NEWLINE ;
+----
+
+As a rule of thumb you generally should be fully defining all terminals with their own rules but you can also define them in parser rules, so the above can be rewritten as `assignment_statement : ID ':' expression NEWLINE ;` which while it isn't best practice we will be doing a fair bit in this tutorial.
+Behind the scenes ANTLR is secretly making a terminal which will hold the `:` symbol as the parser can *only* work with lexed tokens and not raw text.
+
+== Why Bother?
+
+At this point you might be like, "woah this feels like a LOT of work, why can't I just use a regex?"
+And that is a perfectly good question, this *is* more work than a regex, at least to get started.
+For a start there are some formats, famously XML, which can't technically be parsed via regex, but this isn't the main reason in my mind as rarely will you find yourself in this situation.
+
+The main reason I see is for readability and maintainability.
+Regexs rapidly get out of hand, often your regex starts out small and readable but over time it needs to grow and soon becomes a behemoth.
+You can get around this by breaking up your input and running through multiple sub-regex, or having multiple named regex combined together, but at this point you are basically just reinventing a parser so why not use one from the start?
+This clear separation of the two stages lexing and parsing and by already breaking everything up into chunks a parser generator forces you to keep each part small.
+Small is good, small is understandable.
+This means adding and changing rules becomes simpler, ideally.
+
+There is also the issue of making domain specific languages.
+Often we force our end users to use inappropriate formats like JSON or CSV to input data because they are either easy to parse or the parsing is already done for us, not because its a format that matches the problem.
+This pushes the work burden off the tooling onto the user, why not instead have a DSL that is parsed in place?
+Tools can do things automatically, users can't, don't make your users life hard because you want to stick to the tools you know.
+
+== Tarsier's Grammar
+
+Now it's time to start making the grammar for Tarsier.
+We will be building it up in stages jumping between both lexer and parser rules as we add new features in.
+We will be putting all of our lexer and parser rules into one file, with lexer rules being put at the bottom and parser rules at the top.
+
+[NOTE]
+====
+You can split your grammar up into separate lexer and parser files, and this is required for some of the advanced features of ANTLR.
+We won't be doing that today.
+====
+
+=== Getting Started
+
+. Create a new text file called `Tarsier.g4`, all our grammar rules will be going in here.
+. Add the grammar declaration at the top of the file `grammar Tarsier;`
+
+[WARNING]
+====
+This grammar name and the file name *must* match!
+====
+
+[start=3]
+. Create the top level parser rule:
+
+----
+program : statement+ EOF ;
+----
+
+This will be the top level point for all Tarsier source code, they hold a `program`.
+A program will be one or more `statements` and then then end of file (`EOF`).
+`EOF` is a predetermined lexer terminal that as the name implies represent the termination of the input, so we don't have to define that ourselves.
+Currently we don't have any statements defined so if you try and run this you will get error but we will be creating some soon.
+
+[TIP]
+====
+We've built this grammar so that it is both easy to understand (we hope), and easy to teach (we hope).
+This is not meant to be a "here is the correct way to ANTLR", some of the ways we've solved it aren't even our preferred way they are just the most obvious way in our opinion or show off a broad array of ANTLR features.
+There are many ways to solve a problem using ANTLR and this is just one approach, if you have your own ideas go for it.
+====
+
+=== Whitespace and Newlines
+
+Tarsier doesn't care about whitespace and treats line returns as the line terminator for statements, so it makes sense we hook those up first.
+These are also going to be used in literally every other rule so makes sense to get them up and running early on.
+These will both be lexer rules.
+
+==== Newlines
+
+At the bottom of our grammar file add the following:
+
+----
+NEWLINE : [\r\n]+ ;
+----
+
+This will capture one or more carriage returns or linefeed symbols (or one or more of any combination of those).
+We do it this way so that we don't have to worry about line encodings, but we could enforce line endings if we so desired.
+
+==== Whitespace
+
+At the bottom of the grammar add the following:
+
+----
+WS : [ \t]+ -> skip ;
+----
+
+This is capturing any number of empty spaces or tabs as the terminal `WS`.
+This works exactly like the above `NEWLINE` but with one small difference, the `skip` command.
+At the end of the rule we are telling the lexer to just ignore these tokens, this still lex them but will not put them in the token stream that the parser will later consume.
+This means we don't have to worry about any rogue white space in our parser rules later.
+
+[NOTE]
+====
+If your language does need to care about whitespace you can still manage that yourself.
+Though if your language wants to do a syntactic whitespace similar to Python you can also do that but it requires a few more steps.
+====
+
+=== Comments
+
+Now we want to get comments working.
+Comments are in my mind the most important part to get working as soon as you can because when building these things up piece by piece you'll find yourself having to change your testing input a fair bit as you are going.
+So its a massive timesaver to be able to quickly hide sections of your test input.
+Add the following new lexer rule:
+
+----
+COMMENT : '//' .*? NEWLINE ;
+----
+
+Here we are using a new symbol the `.` which tells the lexer to match against literally any symbol.
+This is identical to if we had written out `[\u0000-\uffff]` to say "I want anything in the entire unicode spectrum please" but is much more convenient to write.
+We've also got the zero or more operator, so we are saying that we want to capture literally anything after a `//` up to a line end.
+There's also the `?` which we are using to say we don't want this rule to be greedy, so it is to stop as soon as it can and not keep gobbling until it can gobble no longer.
+
+A little bit later we will be changing this lexer rule so that the lexer skips it like it does for whitespace but because we've not tested anything in a while we'll leave it as is so we can do some testing.
+
+==== Making comments a statment
+
+Earlier on we made it so our program is a collection of statements, but we don't currently have any statements defined in the parser, let's make it so that comments are a statement.
+Add the following parser rule:
+
+----
+statement : COMMENT ;
+----
+
+Now lets take our test file, we've given it to you pre-commented out but if you want to make your own just create a new file and put some comments in.
+
+Now let's quickly run our Tarsier grammar and see what we get.
+
+image::tarsier-comments.png[Tarsier Comments Statements]
+
+Tah-dah we've made our first steps on a working Tarsier parser!
+
+=== Literals
+
+While comments are the life blood of quickly checking things they aren't exactly exciting, let's start adding in the work for supporting assignment statements and functions.
+To do this we are going to need to handle literals, integer literals and id literals.
+
+==== Ints
+
+Ints are luckily enough one of the easiest things to handle, add a new lexer rule:
+
+----
+INT : [0-9]+ ;
+----
+
+And now we are correctly lexing positive number integers.
+But positive integers is pretty limiting so we'll add an optional negation character at the start so we can have the full gamut of integers:
+
+----
+INT : '-'? [0-9]+ ;
+----
+
+==== Ids
+
+Our id literals will work in a pretty similar manner built up out of sets, but Tarsier supports upper, lower, and kebab case variable and function names so we will need to make this rule slightly larger:
+
+----
+ID : ([a-z]|[A-Z])([a-z] | [A-Z] | '-')* ;
+----
+
+This matches either a single upper or lower case character, and then any number of upper, lower, or kebab characters after it.
+We do it this way because we require it to be at least one character but it has to be upper or lower to start.
+If we wanted more specific rules, say for example it has to start with a lower case character it is easy to change into:
+
+----
+ID : [a-z] ([a-z] | [A-Z] | '-')* ;
+----
+
+=== Assignments
+
+Now that we are handling ints and ids we can start start using them to make an assignment statement.
+Assignments go `id : value` so we can write this pretty easily as the following new parser rule:
+
+----
+assignment_statement : ID ':' expression NEWLINE ;
+----
+
+[NOTE]
+====
+We probably should change `:` into its own lexer rule but it literally only exists here for assignments so we won't bother, but it is good practice to do so.
+====
+
+Now we need to make it so that assignments are an actual `statement` as far as the parser is concerned, replace the `statement` rule with:
+
+----
+statement : assignment_statement ;
+----
+
+==== Beginning Expressions
+
+Now we have an issue, we've mentioned an `expression` rule but haven't written that yet.
+Later on we are going to be writing `expression` so that it can handle various maths expressions but for now we'll just hook it up to an `INT`.
+Add the following new parser rule:
+
+----
+expression : INT ;
+----
+
+==== Skipping comments
+
+The last thing we need to do is change the `COMMENT` rule so that it no longer generates terminals but instead skips over them as we no longer need it to be recognised by the parser.
+Change the `COMMENT` rule into the following:
+
+----
+COMMENT : '//' .*? NEWLINE -> skip ;
+----
+
+==== Testing
+
+Ok now it is time again to give our new assignment rules a go.
+Uncomment some of the assignment statements inside the test file and lets see what we get.
+
+image::tarsier-assignments.png[Tarsier Assignment Statements]
+
+=== Functions
+
+Functions are luckily enough mostly done for us, we've already got the `ID` resolved, we just need to give it some parameters.
+There is a slightly tricky thing we need to resolve first, the list of parameters.
+Parameters are going to be any number of `expression` wrapped inside some parentheses.
+So while we could do something like:
+
+----
+function 
+    : ID '(' ')'
+    | ID '(' expression ')'
+    | ID '(' expression ',' expression ')'
+    ...
+    | ID '(' expression ...infinite expressions later... expression ')' ;
+----
+
+We'd need a *lot* of writing and heaps of it is duplicated so instead we'll break it up into a `function_statement` and a `function_list`.
+Add the follower parser rules:
+
+----
+function_statement : ID '(' function_list? ')' NEWLINE ;
+function_list : expression (',' expression)* ;
+----
+
+What we have now a single `function_statement` that takes an optional `function_list`.
+The list itself goes you must have at least one `expression` and then as many comma-separated expressions afterwards you want.
+Because the list is optional this handles the situation where they want no parameters to the function.
+
+Now all we have to do is add it into our list of statements, uncomment a few functions in our test file, and we can give a whirl:
+
+----
+statement 
+    : assignment_statement
+    | function_statement
+    ;
+----
+
+image::tarsier-functions.png[Tarsier Function Statements]
+
+=== Expressions
+
+Now that we've got a solid understanding lets start expanding Tarsier, time to make expressions do more.
+First we are going to need some more lexer rules for our maths operators:
+
+----
+MUL : '*' ;
+DIV : '/' ;
+SUB : '-' ;
+ADD : '+' ;
+----
+
+Next we want to expand out the `expression` rule to support more, it will not only need to support all of the above operators, but it will also need to support ints and variables.
+Much like with the `function_list` if we were to have to write out every single possible combination of various ways an expression can be chained together it would take ages, luckily ANTLR lets us do something very neat for example:
+
+----
+expression 
+    : expression MUL expression
+    | INT
+    ;
+----
+
+This is called left-recursion and lets us write our `expression` rule as a series of different `expression` rules built up together and actually has a lot of clever work behind it to make it work.
+So the above would support any combination of multiplications statements chained together.
+This is also easy to extend to support all our operators and variables:
+
+----
+expression 
+    : '(' expression ')'
+    | expression (MUL|DIV) expression
+    | expression (ADD|SUB) expression
+    | ID
+    | INT
+    ;
+----
+
+This is our almost completed expression rule and supports any level and combination of our four operators, the parentheses, and variable or ints as the lowest level.
+Here we've broken them up by their order of operation instead of each getting their own (although that can also work) but there is a couple of little changes we should make that won't impact the parsing but will make our life easier when it comes time to use the parser ANTLR generates:
+
+----
+expression 
+    : '(' expression ')'                                        #eqPar
+    | left = expression operator = (MUL|DIV) right = expression #eqMul
+    | left = expression operator = (ADD|SUB) right = expression #eqAdd
+    | ID                                                        #eqVar
+    | INT                                                       #eqInt
+    ;
+----
+
+This is almost identical to the earlier one but now we've labelled each of the various sub-expressions so that they will appear as unique nodes in the tree and not just all as one of five different possible `expression` and we've labelled the left, right, and operators in the expression to simplify our interpreter later on.
+
+=== Conditionals
+
+The last part missing from Tarsier are conditionals, these work pretty much like everything we've sen but with one small quirk, we have to handle the code block that goes with each `if` or `else`.
+First we'll create the if itself:
+
+----
+if_statement : if_fragment code_block else_fragment? ;
+----
+
+Here we've broken our if up into three different chunks, the if, its code block, and then the optional else.
+These three are fairly straight-forward:
+
+----
+if_fragment : 'if' bool_expression NEWLINE? ;
+else_fragment : 'else' NEWLINE? code_block ;
+code_block : '{' NEWLINE? statement+ '}' NEWLINE ;
+----
+
+Only slightly weird thing is all of the optional line handling, this is a side effect of choosing to use line ends to terminate statements but at the same time also allowing braces in conditionals to go anywhere they darn well feel like going.
+It isn't a huge concern, it just looks a bit messy.
+
+Finally we now need the actually boolean expressions:
+
+----
+bool_expression 
+    : left = expression '=' right = expression #boolEq
+    | left = expression '>' right = expression #boolGt
+    | left = expression '<' right = expression #boolLt
+    ;
+----
+
+With that our grammar is done, we can uncomment the rest of the test file and give it a go!
+
+== Tarsier Interpreter
+
+Now that our grammar is complete we can start using it to complete our JavaScript implementation of Tarsier.
+We are going to be making a basic Tarsier interpreter, the reason for this is because it is a bit more immediate and slightly simpler than a compiler.
+From the perspective of integrating with the ANTLR generated parser though it is identical.
+
+[WARNING]
+====
+I'd argue that JavaScript and not Perl is the king of the "there's more than one way to do it" realm but regardless it is a very open language to letting you decide your paradigm.
+We've only got a short amount of time so we are going to be taking some approaches to programming that aren't shall we say the best, but some of you in the room were probably going to think that anyway because JS is just so flexible.
+As with anything programming, take the material presented as guide, not canon.
+====
+
+=== Our setup
+
+We'll be making our Tarsier interpreter in JavaScript because it is relatively easy hook into ANTLR with, doesn't require anything but a modern browser (which I imagine you've all got), and already has a *whole* bunch of the UI done for us, because UI's are hard.
+Inside the tutorial folder there will be an `index.html`, this is where we will be writing our JS to talk to ANTLR.
+
+As we will be connecting various bits and pieces of JS together we will run into cross-origin concerns, you can either turn off cross-origin protection in your browser (please don't) or run a server to host all the files.
+We'll be using Python's *SimpleHTTPServer* to be our server but you can use whatever you want.
+
+----
+python2 -m SimpleHTTPServer 8000
+----
+
+Or
+
+----
+python3 -m http.server 8000
+----
+
+Once you've got the page up and running there's a single editor, a parse button which will trigger our parsing, and a section for showing the output of Tarsier.
+
+image::demo.png[Our Demo Setup]
+
+==== Structure
+
+While you don't need to know how we put together the demo if you are curious here is a quick run down.
+
+Our editor here is the fantastic in-browser https://github.com/ajaxorg/ace[Ace] editor using the default theme but with a custom (and very crude) syntax highlighter I built for Tarsier (`my-mode.js`).
+This mode is based on the official https://github.com/antlr/antlr4/blob/master/doc/ace-javascript-target.md[Ace-ANTLR integration docs] with some small tweaks and changes and really isn't designed for anything complex, just to give us basic highlighting.
+
+We are using `require.js` to hook the various JS bits and pieces together.
+ANTLR recommends you use NPM or WebPack and normally you would but for such a simple demo project setting these up isn't worth it.
+So instead we are using a (slightly older because it seemed more reliable) version of https://github.com/letorbi/tarp.require/tree/smoothie[Smoothie's require.js].
+The ANTLR side of the demo comes directly from the http://www.antlr.org/download/antlr-javascript-runtime-4.7.2.zip[ANTLR JS runtime] and is entirely self-contained, although normally NPM is the recommended way of getting the runtime.
+
+The output section is a `div` that we are going to be manually writing the program output into whenever the `parse()` function is called.
+The `parse()` function runs when the parse button is pressed and will wipe the output away, read the value from Ace, pass that over to ANTLR, and finally run our soon to be written interpreter over the parse tree ANTLR creates.
+
+=== Exporting the code
+
+With our setup ready and working we can start to use ANTLR to generate some code.
+
+----
+antlr4 Tarsier.g4 -Dlanguage=JavaScript -visitor -no-listener
+----
+
+Running this command will make ANTLR generate the parser code to handle Tarsier with a couple of different options.
+The first flag is setting the language to be JS, by default if you don't set a language ANTLR will choose Java for you.
+The next flag is we are asking for a visitor to be generated, and finally we are asking for a listener to *not* be generated.
+
+==== Visitors and Listeners
+
+ANTLR can generate both visitors and listeners, in our case we only want the visitor hence the flags but they are fairly similar to each other.
+Listeners are a prebuilt tree walker, they take the parse tree ANTLR generates and will walk it in a left-to-right depth-first fashion telling you when you enter and exit nodes of the tree.
+Depending on what you are doing this is good enough, hence why it is the default.
+The listener is what is used by the testrig to show the parse tree.
+In our case we need to control the flow of the program (such as which code block to run in an if-else) which is where the visitor comes into play.
+A visitor is also a tree walker but you say which node to visit next, if you just visit the nodes in order they appear you are doing the exact same work as the listener.
+Visitors also return the result of visiting that node whereas as Listeners have no return, that result will depend greatly on what you are doing within, so it could be emitting some bytecode, or literally returning a value to be used earlier on.
+What your visitor returns is very specific to the issue at hand, so with that in mind it is time to start building our visitor!
+
+[NOTE]
+====
+You might have noticed alongside generating a bunch of JS there are these `token` and `interp` files being generated.
+These are vital parts of ANTLR's operation but you don't have to ever touch them, nor should you.
+If you are curious looking at them in a text editor it will give you a bit of insight into the inner workings of ANTLR.
+Tokens are converted into integers so the parser can just quickly run through them as integer comparisions and maths is *WAY* quicker than with strings.
+This also has a benefit of helping with multiple languages, they all have their own understanding of a string, but an int is an int is an int pretty much everywhere.
+====
+
+=== Our Visitor
+
+The default visitor that antlr has generated for us `TarsierVisitor.js` is a complete visitor class designed to be subclassed, if we were to just run this visitor we'd get something that walks the tree normally.
+As mentioned above we want control so we are going to subclass this:
+
+[source,JavaScript]
+----
+var BasicVisitor = function() 
+{
+    this.variableStorage = new Object();
+    TarsierVisitor.call(this);
+        return this;
+}
+BasicVisitor.prototype = Object.create(TarsierVisitor.prototype);
+BasicVisitor.prototype.constructor = BasicVisitor;
+----
+
+The only thing worth pointing out here is the `variableStorage` we've created, this is where we will be keeping track of the current state of the variables in our program.
+We are going to be doing this with a dictionary because it is easy, depending on the needs of your language this will get unweildy quickly but for Tarsier it'll be fine.
+With our visitor ready we can start implementing the different pieces.
+
+=== Variables and Expressions
+
+==== Assignments
+
+We'll start with assignments because they are pretty straight-forward:
+
+[source,JavaScript]
+----
+BasicVisitor.prototype.visitAssignment_statement = function(ctx)
+{
+    var varName = ctx.ID().getText();
+    var value = this.visit(ctx.expression());
+    this.variableStorage[varName] = value;
+}
+----
+
+Here we are getting the name of the variable and result of the expression as storing that into our variable storage system.
+
+==== Expressions
+
+[source,JavaScript]
+----
+BasicVisitor.prototype.visitEqVar = function(ctx)
+{
+    var varName = ctx.ID().getText();
+    var result = this.variableStorage[varName];
+    return result;
+}
+BasicVisitor.prototype.visitEqInt = function(ctx)
+{
+    var value = parseInt(ctx.INT().getText());
+    return value;
+}
+BasicVisitor.prototype.visitEqPar = function(ctx)
+{
+    return this.visit(ctx.expression());
+}
+----
+
+These are the three basic expressions and what all expressions will eventually boil down to chaining into; variables, ints, or expressions wrapped in parentheses.
+For variables we just get the variable out of the storage, for ints we parse the text that comprise the int, and for brackets we just get the value of the expression inside.
+
+Now we need to do the `left operator right` style expressions.
+
+[source,JavaScript]
+----
+BasicVisitor.prototype.visitEqAdd = function(ctx)
+{
+    // work out if add or subtract
+    var operator = ctx.operator;
+    var left = this.visit(ctx.left);
+    var right = this.visit(ctx.right);
+
+    if (operator.type == TarsierLexer.ADD)
+    {
+        return left + right;
+    }
+    else
+    {
+        return left - right;
+    }
+}
+BasicVisitor.prototype.visitEqMul = function(ctx)
+{
+    var operator = ctx.operator;
+    var left = this.visit(ctx.left);
+    var right = this.visit(ctx.right);
+
+    if (operator.type == TarsierLexer.MUL)
+    {
+        return left * right;
+    }
+    else
+    {
+        return left / right;
+    }
+}
+----
+
+These are exactly the same (and if we wanted to we could have written the grammar so they weren't individual nodes), we get the value of the left and right components, then we find the correct operator and perform the maths.
+Finally we then return the result so that it can be used elsewhere.
+
+[WARNING]
+====
+We aren't doing any error handling around null values or malformed input, which you *really* should be doing.
+We are basically just relying on JS's type coercion to look after us.
+====
+
+==== Conditionals
+
+Next up we'll handle boolean expressions, these will work in an identical fashion to the maths expressions.
+
+[source,JavaScript]
+----
+BasicVisitor.prototype.visitBoolEq = function(ctx)
+{
+    var left = this.visit(ctx.left);
+    var right = this.visit(ctx.right);
+
+    return left == right;
+}
+BasicVisitor.prototype.visitBoolGt = function(ctx)
+{
+    var left = this.visit(ctx.left);
+    var right = this.visit(ctx.right);
+
+    return left > right;
+}
+BasicVisitor.prototype.visitBoolLt = function(ctx)
+{
+    var left = this.visit(ctx.left);
+    var right = this.visit(ctx.right);
+
+    return left < right;
+}
+----
+
+With them done we can now handle if-else statements.
+
+[source,JavaScript]
+----
+BasicVisitor.prototype.visitIf_statement = function(ctx)
+{
+    var elseFragment = ctx.else_fragment();
+    if (this.visit(ctx.if_fragment()) == true)
+    {
+        this.visit(ctx.code_block());
+    }
+    else if (elseFragment != null)
+    {
+        this.visit(ctx.else_fragment());
+    }
+}
+----
+
+In a similar fashion to the expressions we are getting the results of the if boolean expression.
+If it results in true we visit the if's code block.
+If it results in false we first check if there is an else block, and if there is we visit that.
+The code for visiting the respective fragments is very simple:
+
+[source,JavaScript]
+----
+BasicVisitor.prototype.visitIf_fragment = function(ctx)
+{
+    return this.visit(ctx.bool_expression());
+}
+BasicVisitor.prototype.visitElse_fragment = function(ctx)
+{
+    this.visit(ctx.code_block());
+}
+----
+
+==== Functions
+
+We've saved the trickiest till last, functions.
+First we'll implement the function list because we will need to know what the function has to be given:
+
+[source,JavaScript]
+----
+BasicVisitor.prototype.visitFunction_list = function(ctx)
+{
+    var result = [];
+    
+    var expressions = ctx.expression();
+    var index = 0;
+    for (index = 0; index < expressions.length; index++)
+    {
+        result.push(this.visit(expressions[index]));
+    }
+    return result;
+}
+----
+
+In this case we are getting the results of the individual expressions of the function parameters and adding them to a list we then give back to the function.
+Now we have to implement the function.
+Because Tarsier doesn't have support for writing your own function essentially every function will have to be manually handled by us, in this case we will handle a `print` function ourselves but for every other function we will do one of two things.
+We will either pass it onto the browser window, letting us call built-in JavaScript functions or we will just print out that we hit an unknown function.
+
+[WARNING]
+====
+Passing unsanitised function calls *directly* into your development environment is super dangerous, don't ever do this outside of a "let's just quickly hack something together" space like this tutorial.
+Even in an space like this tutorial it is dangerous so be careful out there!
+====
+
+[source,JavaScript]
+----
+BasicVisitor.prototype.visitFunction_statement = function(ctx) 
+{   
+    var arguments = "_";
+    var functionList = ctx.function_list();
+    if (functionList != null)
+    {
+        arguments = this.visit(functionList);
+    }
+
+    var result = "null";
+    var funcName = ctx.ID().getText();
+    if (funcName != "print")
+    {
+        try
+        {
+            var funcResult = window[funcName](arguments);
+            if (funcResult == null)
+            {
+                funcResult = "no result";
+            }
+            result = "Browswer function: <i>" + funcName + "</i>: " + funcResult;
+        }
+        catch
+        {
+            result = "<i>Undefined function: " + funcName + "</i>" + " arguments: [" + arguments + "]";
+        }
+    }
+    else // printing is a special case we are handling
+    {
+        result = arguments;
+    }
+    var output = document.getElementById("output");
+    output.innerHTML = output.innerHTML + ("<p>" + result + "</p>");
+}
+----
+
+With that done our implementation is done! 
+
+[NOTE]
+====
+You might have noticed we haven't actually implemented every single parser rule that our grammar defined, and you are correct.
+We don't have to implement them because the default handling is actually what we want, no need to make more work for ourselves if we don't have to.
+====
+
+=== Taking It Out For A Spin
+
+It's time to finally harvest the fruits of our labour!
+If not already done so fire up the server, navigate your browser to `127.0.0.1:8000` and start plugging in some Tarsier code!
+
+==== Error handling
+
+So we are done with Tarsier, or almost done.
+If you made an error in your code while it would have logged this into the developer console and that isn't really helpful to us, we want to see our mistakes in their full glory!
+ANTLR has a pretty damn solid error handling system that does its best to try and recover from mistakes to keep parsing and while we can override that to provide custom error handling that is bigger than we've got time for and is so domain specific it wouldn't really be of much use.
+Instead lets look at just being alerted when errors occur so we can present them.
+ANTLR has a system called error listeners which are objects that get told when errors occur, and while they can't then influence what ANTLR does next it does let you know about the errors.
+
+[source,JavaScript]
+----
+var ErrorListener = function() 
+{
+    antlr4.error.ErrorListener.call(this);
+        return this;
+};
+ErrorListener.prototype = Object.create(antlr4.error.ErrorListener.prototype);
+ErrorListener.prototype.constructor = ErrorListener;
+ErrorListener.prototype.syntaxError = function(recognizer, offendingSymbol, line, column, msg, e) 
+{
+    var error = "Error at " + line + "," + column + ": " + msg + ".";
+
+    var output = document.getElementById("output");
+    output.innerHTML = output.innerHTML + ("<p><b>" + error + "</b></p>");
+};
+----
+
+Here we are subclassing the default error listener which is dumping to the console and instead now we are redirection them into our output section.
+That is it for our error handler but now we need to make a small change to the `parse` function so that it gets used.
+Inside the `parse` function after the creation of the parser but before building the tree add the following code:
+
+[source,JavaScript]
+----
+var errorListener = new ErrorListener()
+parser.removeErrorListeners();
+parser.addErrorListener(errorListener)
+----
+
+Now if we make an error we get to see it.
+
+== The End?
+
+Congratulations, you've started from nothing to making your own garbage programming language.
+Of course there is so much more to explore, we've barely scratched the surface of what is possible with this and similar tools.
+
+=== Lexer Modes
+
+One quite large feature we've skipped clean over is lexer modes.
+Depending on your problem (such as Tarsier) you don't need to use them but they are necessary for certain problems, especially dealing with island grammars.
+These are essentially mini-languages or grammars that need to be embedded into a larger one but have different syntax.
+XML is a good example of an island grammar, the rules for what can go inside the `<>` chevrons follow vastly different rules to those that describe the tags themselves.
+C Macros are another example, the macro language is nothing like the C language itself.
+Even if you can craft a grammar that supports island grammars without lexer modes it may still be better from a maintainability perspective to use lexer modes.
+
+Lexer modes require you to know a little bit about how the lexer works.
+In a nutshell it reads symbol by symbol matching up against rules, and while this is true the rules it matches against are determined by what mode the lexer is in.
+The lexer has a mode stack, the top of the stack at launch is always the default mode, and this is what is used if you never change modes, but as you encounter rules you can push and pop new modes on and off the stack.
+The lexer rules defined in each mode determine what the lexer can and can't match letting you write rules that would otherwise wreck havoc on the rest of your grammar without fear of interference.
+
+----
+<<if $interactions is < 3>>
+    <<if $met_bob is True>>
+        Alice: Good to see you again.
+        Bob: if only that were the case!
+        Alice: Sorry?
+        Bob: You know what you did.
+    <<else>>
+        Alice: Hi, i'm Alice
+        Bob: Hi, Bob.
+        <<set $met_bob to True>>
+    <<endif>>
+    <<set $interactions to $interactions + 1>>
+<<endif>>
+
+Alice: well I have to go
+----
+
+This is a snapshot of a language called Yarn (nothing to do with the Facebook project that came out *after* this Yarn) and is designed for writing narrative stories in games.
+While yarn is mostly free form text it has controls for telling the game what to do next.
+These are implemented as various lexer modes (this is only a slice of what the language has) so that we don't interfere with the core of the language, the writers dialogue.
+
+----
+COMMAND_START : '<<' -> pushMode(COMMAND);
+
+// below this line the lexer commands only exist when in command mode
+mode COMMAND;
+
+IF : 'if' ;
+ELSE : 'else' ;
+ENDIF : 'endif' ;
+SET : 'set' ;
+
+TO : 'to' | '' ;
+IS : 'is' | '==' ;
+ADD : '+' ;
+
+// etc etc
+
+BOOL : 'True' | 'False' ;
+ID : '$' ([a-z] | [A-Z] | '_')+ ;
+NUM : [0-9]+ ('.' [0-9]+)? ;
+
+// etc etc
+
+COMMAND_END : '>>' -> popMode;
+----
+
+One disadvantage of lexer modes is you are now *required* to break up grammar into two separate files, one for the lexer and one for the parser.
+The parser doesn't care about lexer modes, you can use any rule defined in your lexer however you want for example:
+
+----
+if : COMMAND_START IF expression COMMAND_END ;
+----
+
+This parser rules uses `COMMAND_START` from default mode, but the `IF` and `COMMAND_END` are from the COMMAND mode, as well are presumably chunks of the `expression` rule.
+The tricky bit with lexer modes is ensuring you push and pop modes correctly otherwise tokens you think should be lexed correctly will either be gobbled up by another rule or fail to be lexed.
+
+=== Semantic Predicates
+
+Semantic predicates are a way to control if a rule gets selected.
+They are small (ideally) boolean expressions that are placed inside rules that either change how the rule is selected.
+As a rule of thumb you should avoid them unless you need them; they complicate parsing, impact performance, and tie the otherwise generic grammar down to a specific language that you used to implement that predicate.
+
+[NOTE]
+====
+Because ANTLR is written in Java and Java is the default output language most semantic predicates are also written in Java.
+If Java isn't your intended output language you will have to make sure your predicates are written for your target language.
+====
+
+To create a semantic predicate you add the code to modify the rule inside of `{` brackets `}`.
+
+----
+IF
+    : 'if'
+    | 'IF'
+    | {false} 'iF'
+    | {false} 'If'
+    ;
+----
+
+In here we are saying that despite there being four ways of writing `if` we are explicitely locking off two of them.
+They can never be matched regardless because even if the lexer sees `iF` when it tries to complete the token it will check the predicate, see that evaluates to false and abort the match.
+This example is a little silly because you could just not add in support for them in the first place, but they are also the simplest possible predicates.
+
+----
+THING : ~[<]  | ('<' {_input.LA(1) != '<'} ) ;
+----
+
+This is a more complex version where we are saying to match anything except a `<` or only match a `<` if the next immediate symbol (`input.LA(1)` is an internal ANTLR function call in Java that takes the input stream and looks ahead one symbol) isn't also a `<`.
+In general though if you can restructure your grammar to not need the semantic predicate this is often the better move.
+
+=== Compiler
+
+The obvious next step you would take something like our implementation of Tarsier would be to change it from a very crude interpreter to something that can handle the running of the program for us.
+Probably the most straight forward way to do this is to compile our Tarsier program into something LLVM could use.
+
+The advantage of running your code in a platform like LLVM is it has already handled optimisation and running code on multiple platforms for you.
+This simplifies having to worry about deployment or optimisation.
+The disadvantage is now you've tied yourself to LLVM.
+
+To integrate into LLVM you would either need an Abstract Syntax Tree (AST) or LLVM intermediate language (IL).
+Creating an AST would let you deploy your code to anything where an AST is accepted (many different runtimes can handle an AST) or generate the IL directly.
+In both cases you would need a new tree walker that would go through and generate either AST nodes based on the parse tree or IL based on the parse tree.
+
+=== PEGs
+
+A Parsing Expression Grammar (PEG) looks and feels pretty similar to a CFG tool like ANTLR, and can often be used to solve the same sorts of problems.
+From a technical perspective a PEG cannot support ambiquity whereas a CFG can.
+From a practical perspective a PEG rarely can handle left-recursion and often the implementation is tied to the grammar directly.
+This means you lose a bit of flexibility but have an easier time getting up and running.
+There are also some highly technical memory and performance differences between ANTLR and most PEGs but those are going to be something you have to handle when you encounter them.
+
+[NOTE]
+====
+As a rule of thumb parsing, no matter how you choose to do it (PEG, packrat, regex, CFG) will always be a bit slow, it can't not be.
+If performance is your primary goal working out how to avoid parsing will give better results than worrying about the specific parser technique you are using.
+====
+
+----
+// Simple Arithmetics Grammar
+// ==========================
+//
+// Accepts expressions like "2 * (3 + 4)" and computes their value.
+
+Expression
+  = head:Term tail:(_ ("+" / "-") _ Term)* {
+      return tail.reduce(function(result, element) {
+        if (element[1] === "+") { return result + element[3]; }
+        if (element[1] === "-") { return result - element[3]; }
+      }, head);
+    }
+
+Term
+  = head:Factor tail:(_ ("*" / "/") _ Factor)* {
+      return tail.reduce(function(result, element) {
+        if (element[1] === "*") { return result * element[3]; }
+        if (element[1] === "/") { return result / element[3]; }
+      }, head);
+    }
+
+Factor
+  = "(" _ expr:Expression _ ")" { return expr; }
+  / Integer
+
+Integer "integer"
+  = _ [0-9]+ { return parseInt(text(), 10); }
+
+_ "whitespace"
+  = [ \t\n\r]*
+----
+
+This is from peg.js's https://pegjs.org/online[online example] to create a basic arithmetic parser.
+You can see in here how some of the maths is being done inline in the grammar as it is encountered.
+
+The choice to use a PEG vs ANTLR is more or less a personal one, rarely in our experience will the technical differences cause any concern.
+
+== Attribution
+
+- https://github.com/antlr/antlr4[ANTLR 4] and the https://github.com/antlr/antlr4/tree/master/runtime/JavaScript[ANTLR 4 JS Runtime] available under the BSD License.
+- Torben Haase's https://github.com/letorbi/tarp.require[require.js] available under the LGPL v3 License.
+- https://github.com/ajaxorg/ace[Ace Editor] available under the BSD License.
+- https://github.com/thesecretlab/YarnSpinner[Yarn Spinner] grammar available under the MIT License.
+- https://github.com/mike-lischke/vscode-antlr4[vscode-antlr4] plugin available under the MIT License.

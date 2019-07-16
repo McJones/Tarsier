@@ -1,0 +1,38 @@
+//variable : 5
+//more-complex-var : 2
+//print (variable)
+//madeUpFunction(more-complex-var)
+
+//variable : 2 - more-complex-var
+
+//anotherFunction(variable, 3, 5 + 9)
+
+//if variable < 5
+//{
+//	print(variable)
+//}
+
+//variable : -5 - -2
+
+//if variable = variable
+//{
+//	print(variable)
+//	if variable < 4
+//	{
+//		alert(0)
+//	}
+//	else
+//	{
+//		alert(1)
+//	}
+//}
+//else
+//{
+//	print(-5)
+//}
+
+//if 1 > 2 { print ( variable )
+//}
+
+//variable : 2 - 5 * 3 / 6 + (9 / 4)
+//print(variable)

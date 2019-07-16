@@ -1,0 +1,55 @@
+<head>
+<script src='require.js'></script>
+<style type="text/css" media="screen">
+    #editor 
+    { 
+        width: 100%;
+        height: 50%;
+    }
+</style>
+<script>
+    var antlr4 = require('antlr4/index');
+
+    var TarsierLexer = require('./TarsierLexer').TarsierLexer;
+    var TarsierParser = require('./TarsierParser').TarsierParser;
+    var TarsierVisitor = require('./TarsierVisitor').TarsierVisitor;
+
+    function parse()
+    {
+        var input = editor.getValue();
+
+        var output = document.getElementById("output");
+        output.innerHTML = "";
+
+        var chars = new antlr4.InputStream(input);
+        var lexer = new TarsierLexer(chars);
+        var tokens  = new antlr4.CommonTokenStream(lexer);
+        
+        var parser = new TarsierParser(tokens);
+        
+        var errorListener = new ErrorListener()
+        parser.removeErrorListeners();
+        parser.addErrorListener(errorListener)
+
+        parser.buildParseTrees = true;
+        var tree = parser.program();
+
+        output.innerHTML += "<p>parsing complete</p>";
+    }
+</script>
+<body>
+    <div id="editor"></div>
+    <script src="/ace/ace.js" type="text/javascript" charset="utf-8"></script>
+    <script src="./my-mode.js" type="text/javascript" charset="utf-8"></script>
+    <script>
+            var editor = ace.edit("editor");
+            // editor.setTheme("ace/theme/cobalt"); // can change this to whatever theme we feel like
+            editor.session.setMode("ace/mode/my-mode");
+    </script>
+
+    <div>
+        <input type=button onclick="parse()" value="Parse" />
+        <div id="output"></div>
+    </div>
+</body>
+</head>
