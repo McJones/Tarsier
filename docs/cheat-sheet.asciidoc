@@ -248,8 +248,13 @@ We don't really recommend that today as it means we probably can't help with any
 
 === Installing ANTLR
 
-First grab the tutorial files from *blah*.
+First grab the tutorial files from https://github.com/McJones/Tarsier[GitHub].
 This has the test files for ANTLR but also everything we need for the tutorial so might as well grab it all now.
+
+[TIP]
+====
+This repo also has a `final` branch which has a completed version of the project if you want to skip ahead or feel you got stuck.
+====
 
 ==== Traditional Way
 
