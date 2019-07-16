@@ -2,10 +2,41 @@
 
 OSCON 2019 Tutorial
 
+Hello, and welcome to _Creating Programming Languages For Fun (and maybe profit)_!
+
+Over the course of this tutorial, we'll learn how to use ANTLR4 to create parsers for a toy programming language, `Tarsier`. We'll also learn how _context-free grammars_ work, and how to design a grammar to work the way that you want.
+
+This document is laid out in the following way:
+
+. <<tarsier-language>> describes the Tarsier language at a high level, so that we understand what we're trying to make.
+. <<parsers>> introduces _context-free grammars_, which are how we describe the grammar of a language.
+. <<antlr>> introduces ANTLR4, the software that reads a context-free grammar and generates a parser to match.
+. <<tarsier-implementation>> shows how to build the Tarsier interpreter in ANTLR.
+. <<tarsier-test>> shows how to build a web-based testing platform for our language.
+
+[[tarsier-language]]
 == Tarsier
 
 Today we'll be making the latest and greatest programming language, Tarsier.
 Tarsier has some of the modern features you know and love in programming languages, and is also missing a *whole* lot you'll be expecting because we've only got a few hours.
+
+Tarsier looks like this:
+
+[source]
+----
+
+// Hey, this is some Tarsier code!
+
+// Set 'a' to 5
+a : 5
+
+if a > 5 {
+    doAUsefulThing(a * 5 + 1)
+}
+
+----
+
+Let's start by outlining some of the key features of the language.
 
 === Basic Structure
 
@@ -61,8 +92,8 @@ doStuffWithParameters(variable, anotherVariable)
 
 === Conditionals
 
-Every program needs conditionals, Tarsier has `if` support.
-Each if has a non-optional code block which will be broken up by non-optional `{` and `}`.
+Every program needs conditionals, and Tarsier has `if` support.
+Each `if` has a non-optional code block, which will be broken up by non-optional `{` and `}`.
 
 ----
 if variable < 10
@@ -71,8 +102,8 @@ if variable < 10
 }
 ----
 
-We are enforcing the use of braces because hey we don't want Tarsier to be responsible for another gotofail bug!
-As the braces are required we won't care about the white space of the expression.
+We are enforcing the use of braces because, hey, we don't want Tarsier to be responsible for another gotofail bug!
+As the braces are required, we won't care about the white space of the expression.
 
 ----
 if variable < 10 {
@@ -85,7 +116,7 @@ if variable < 10 {
 Please don't use Tarsier for anything secure, pretty please?
 ====
 
-Tarsier also has an optional `else` component that works very similar to the `if` but there is no `else-if` support.
+Tarsier also has an optional `else` component that works very similar to the `if`. There is no `else-if` support.
 
 ----
 if variable < 10
@@ -101,8 +132,8 @@ else
 ==== Boolean Expressions
 
 Boolean expressions will work in a manner pretty similar to our maths expressions.
-There will be a left and right component separated by an operator.
-Tarsier supports, less-than, greater-than, and equality operators.
+There will be a left and right component, separated by an operator.
+Tarsier supports less-than, greater-than, and equality operators.
 The following are all valid boolean expressions in Tarsier:
 
 ----
@@ -114,13 +145,13 @@ variable = 1 + anotherVariable
 
 [WARNING]
 ====
-Boolean expressions in Tarsier can only exist in the context of a conditional statement, you can't have them existing in isolation.
+Boolean expressions in Tarsier can only exist in the context of a conditional statement. You can't have them existing in isolation.
 ====
 
 === Variable and Function Names
 
-Variables and functions both use the same naming scheme, Tarsier supports camelCase, PascalCase, and kebab-case, or mixing and matching them.
-So variables must start with an `a-z` or `A-Z` character and then zero or more of upper or lower case `a-z` or the `-` character.
+Variables and functions both use the same naming scheme. Tarsier supports `camelCase`, `PascalCase`, and `kebab-case`, or mixing and matching them.
+Variables must start with an `a-z` or `A-Z` character, and then zero or more of upper or lower case `a-z` or the `-` character.
 The following are valid variable or function names in Tarsier:
 
 ----
@@ -129,30 +160,32 @@ aGreatVariable
 AGreatVariable
 ----
 
-but `-a-great-variable-` is not valid because it starts with a `-`.
+This means that `-a-great-variable-` is not valid, because it starts with a `-`.
 
 === Comments
 
-Finally Tarsier also supports single line comments using the `//` operator to signal the start of the comment and run to the end of that line.
+Finally, Tarsier also supports single line comments, using the `//` operator to signal the start of the comment; comments run to the end of the line.
 
+[[parsers]]
 == Parser Basics
 
 Parsing is the process by where a string of characters is analysed and converted into a parse tree for later use based on some predefined rules for how the resulting tree should exist.
 A parser is the program which does the parsing.
-While there are generally two distinct steps in parsing, lexing (or tokenising) and parsing the terms are generally bound up into one program or build process called the parser.
-This is also often integrated directly into the compiler or interpreter which make something practical out of the parse tree.
+While there are generally two distinct steps in parsing, lexing (or tokenising) and parsing, the terms are generally bound up into one program or build process called the parser.
+This is also often integrated directly into the compiler or interpreter, which make something practical out of the parse tree.
 
 === Tokenising and Lexers
 
-The first step is to lex or tokenise the input string.
-This goes through the input one symbol at a time and matches various characters according to rules (also called consuming the stream) and adds these to a stream of tokens.
-Take the following snippet of Tarsier code:
+The first step is to _lex_, or tokenise, the input string.
+This goes through the input one symbol at a time, and matches various characters according to rules (also called consuming the stream) and adds these to a stream of tokens.
+
+For example, take the following snippet of Tarsier code:
 
 ----
 variable : 5
 ----
 
-Assuming we've got a grammar that can lex Tarsier we'd get a token stream out the other end that would look something like the following:
+Assuming we've got a grammar that can lex Tarsier, we'd get a token stream out the other end that would look something like the following:
 
 ----
 ID ASSIGNMENT_OPERATOR INT
@@ -160,9 +193,11 @@ ID ASSIGNMENT_OPERATOR INT
 
 The complexity of the tokens that the lexer can understand vary depending on the tool being used.
 ANTLR can look as far ahead as necessary to complete a token but some tools can only look ahead a fixed number of symbols at a time.
+
 I like to think of the lexer as a machine having a conversation with itself to match rules by gobbling up characters one at a time.
 So in our above example the lexer would be going:
 
+====
 *hey I've got a `v` what's that match?*
 
 *that matches the `ID` rule*
@@ -186,15 +221,16 @@ _many steps later_
 *well that is an `ASSIGNMENT_OPERATOR`*
 
 _and so on and so forth_
+====
 
 [NOTE]
 ====
 So far we've been using the term token, depending on what material you've read before you might have also seen terminal also being used in a similar manner.
 A terminal is the output of consuming tokens, so in the above example the token *variable* became the terminal *ID* and the token *:* became terminal *ASSIGNMENT_OPERATOR*.
-With that in mind the terms are often used interchangeably and we will likely do so during the tutorial, sorry.
+With that in mind, the terms are often used interchangeably and we will likely do so during the tutorial, sorry.
 ====
 
-After the lexing stage has finished the parser takes over.
+After the lexing stage has finished, the parser takes over.
 
 [WARNING]
 ====
@@ -204,13 +240,14 @@ Missing symbols will make debugging your grammars harder.
 
 === Parsing
 
-Once you've got a stream of tokens from the lexer the next step is fairly similar, it is to match up various tokens into statements that get assembled together into a parse tree.
+Once you've got a stream of tokens from the lexer, the next step is fairly similar: matching up various tokens into statements that get assembled together into a parse tree.
+
 The parse tree is the final step and this tree is used by other parts to actually make the language **do** something.
-So our end result of taking a simple piece of code, such as `variable : 5` becomes:
+This means that a simple piece of code, such as `variable : 5`, becomes:
 
 image::basic-tree.png[Basic Parse Tree]
 
-In this case we have the top level of our tree is a `program`, below that we have a single `statement` child node in this case it is an `assignment_statement`.
+In this case, we have the top level of our tree is a `program`, below that we have a single `statement` child node in this case it is an `assignment_statement`.
 The `assignment_statement` itself has several child nodes; an `ID`, a dedicated assignment character `:`, then an `expression` statement which itself holds an `INT` as a child node before finally concluding with a `NEWLINE`.
 When it comes time to use this parse tree you can walk the tree in a left-to-right depth-first fashion as this nearly always matches the structure of your code.
 
@@ -220,9 +257,10 @@ We say nearly always because plenty of times you need the result of a further aw
 `2 * 3 + 5 is not the same as 2 * (3 + 5)` and you'll need to worry about that.
 ====
 
+[[antlr]]
 == ANTLR
 
-ANTLR (Another Tool For Language Recognition) is an open source parser generator that uses a Context-Free Grammar (CFG) to generate a lexer and parser that matches input according to the grammar, or throw errors that the input *doesn't* match the rules of the grammar.
+_ANTLR_ ("Another Tool For Language Recognition") is an open source parser generator that uses a Context-Free Grammar (CFG) to generate a lexer and parser that matches input according to the grammar, or throw errors that the input *doesn't* match the rules of the grammar.
 
 ANTLR has been around for a while, the current major version is 4 and is flexible enough to handle pretty much any programming language or textual data format you can imagine.
 One of the main strengths of ANTLR is it supports a range of different output target languages.
@@ -248,8 +286,8 @@ We don't really recommend that today as it means we probably can't help with any
 
 === Installing ANTLR
 
-First grab the tutorial files from https://github.com/McJones/Tarsier[GitHub].
-This has the test files for ANTLR but also everything we need for the tutorial so might as well grab it all now.
+First, grab the tutorial files from https://github.com/McJones/Tarsier[GitHub].
+This has the test files for ANTLR, but also everything we need for the tutorial so might as well grab it all now.
 
 [TIP]
 ====
@@ -386,11 +424,14 @@ To do that we'll need a launch configuration
 
 [start=5]
 . Replace INPUTFILE, GRAMMARFILE, and ENTRYPOINT with their appropriately named equivalents.
++
 For the test grammar and file this is `testinput.txt`, `TestGrammar.g4`, and `entry` respectively.
 
-[start=6]
-. If you ran the testrig or exported antlr4 code first, make sure to delete the files it created
-. Press F5 to debug run the debug configuration.
+. If you ran the testrig or exported antlr4 code first, make sure to delete the files it created.
+
+. Open the `TestGrammar.g4` file.
+
+. Press F5 to debug run the debug configuration, or click the Play button at the top left.
 
 image::testrig-vscode.png[VSCode Plugin Test Output]
 
@@ -409,7 +450,7 @@ image::vscode-atn.png[VSCode Plugin ATN Graph]
 
 === ANTLR CFG
 
-CFGs are a series of language grammars first formalised by Noam Chomsky based on a collection of related work originally for aiding in understanding natural languages.
+Context-free grammar, or _CFGs_, are a series of language grammars first formalised by Noam Chomsky based on a collection of related work originally for aiding in understanding natural languages.
 They are called context-free because the rules that comprise them can be applied without needing the context of the surrounding text, this has some impacts on their use in natural languages but works pretty much perfectly for computer languages and data structures.
 While there are numerous different CFGs out there they all tend to share a lot of commonality with Extended Backus-Naur Form CFG which was created to standardise the various formal grammars.
 ANTLR uses its own CFG that is very similar to EBNF because as with all things standards related https://xkcd.com/927/[XKCD] applies but if you are interested in reading about CFGs EBNF is a good starting point and similar enough to everything out there to still be useful.
@@ -541,6 +582,7 @@ Often we force our end users to use inappropriate formats like JSON or CSV to in
 This pushes the work burden off the tooling onto the user, why not instead have a DSL that is parsed in place?
 Tools can do things automatically, users can't, don't make your users life hard because you want to stick to the tools you know.
 
+[[tarsier-implementation]]
 == Tarsier's Grammar
 
 Now it's time to start making the grammar for Tarsier.
@@ -858,6 +900,7 @@ bool_expression
 
 With that our grammar is done, we can uncomment the rest of the test file and give it a go!
 
+[[tarsier-test]]
 == Tarsier Interpreter
 
 Now that our grammar is complete we can start using it to complete our JavaScript implementation of Tarsier.
