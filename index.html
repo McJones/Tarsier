@@ -201,10 +201,6 @@
         var tokens  = new antlr4.CommonTokenStream(lexer);
         
         var parser = new TarsierParser(tokens);
-        
-        var errorListener = new ErrorListener()
-        parser.removeErrorListeners();
-        parser.addErrorListener(errorListener)
 
         parser.buildParseTrees = true;
         var tree = parser.program();
