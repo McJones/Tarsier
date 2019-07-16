@@ -12,7 +12,182 @@
 
     var TarsierLexer = require('./TarsierLexer').TarsierLexer;
     var TarsierParser = require('./TarsierParser').TarsierParser;
+    //var TarsierListener = require('./TarsierListener').TarsierListener;
     var TarsierVisitor = require('./TarsierVisitor').TarsierVisitor;
+
+    // building up a visitor
+    var BasicVisitor = function() 
+    {
+        this.variableStorage = new Object();
+        TarsierVisitor.call(this);
+            return this;
+    }
+    BasicVisitor.prototype = Object.create(TarsierVisitor.prototype);
+    BasicVisitor.prototype.constructor = BasicVisitor;
+
+    BasicVisitor.prototype.visitFunction_statement = function(ctx) 
+    {   
+        var arguments = "_";
+        var functionList = ctx.function_list();
+        if (functionList != null)
+        {
+            arguments = this.visit(functionList);
+        }
+
+        var result = "null";
+        var funcName = ctx.ID().getText();
+        if (funcName != "print")
+        {
+            try
+            {
+                var funcResult = window[funcName](arguments);
+                if (funcResult == null)
+                {
+                    funcResult = "no result";
+                }
+                result = "Browswer function: <i>" + funcName + "</i>: " + funcResult;
+            }
+            catch
+            {
+                result = "<i>Undefined function: " + funcName + "</i>" + " arguments: [" + arguments + "]";
+            }
+        }
+        else // printing is a special case we are handling
+        {
+            result = arguments;
+        }
+        var output = document.getElementById("output");
+        output.innerHTML = output.innerHTML + ("<p>" + result + "</p>");
+    }
+    BasicVisitor.prototype.visitAssignment_statement = function(ctx)
+    {
+        var varName = ctx.ID().getText();
+        var value = this.visit(ctx.expression());
+        this.variableStorage[varName] = value;
+    }
+
+    BasicVisitor.prototype.visitFunction_list = function(ctx)
+    {
+        var result = [];
+        
+        var expressions = ctx.expression();
+        var index = 0;
+        for (index = 0; index < expressions.length; index++)
+        {
+            result.push(this.visit(expressions[index]));
+        }
+        return result;
+    }
+
+    // expressions
+    BasicVisitor.prototype.visitEqVar = function(ctx)
+    {
+        var varName = ctx.ID().getText();
+        var result = this.variableStorage[varName];
+        return result;
+    }
+    BasicVisitor.prototype.visitEqInt = function(ctx)
+    {
+        var value = parseInt(ctx.INT().getText());
+        return value;
+    }
+    BasicVisitor.prototype.visitEqPar = function(ctx)
+    {
+        return this.visit(ctx.expression());
+    }
+    BasicVisitor.prototype.visitEqAdd = function(ctx)
+    {
+        // work out if add or subtract
+        var operator = ctx.operator;
+        var left = this.visit(ctx.left);
+        var right = this.visit(ctx.right);
+
+        if (operator.type == TarsierLexer.ADD)
+        {
+            return left + right;
+        }
+        else
+        {
+            return left - right;
+        }
+    }
+    BasicVisitor.prototype.visitEqMul = function(ctx)
+    {
+        var operator = ctx.operator;
+        var left = this.visit(ctx.left);
+        var right = this.visit(ctx.right);
+
+        if (operator.type == TarsierLexer.MUL)
+        {
+            return left * right;
+        }
+        else
+        {
+            return left / right;
+        }
+    }
+
+    // boolean expressions
+    BasicVisitor.prototype.visitBoolEq = function(ctx)
+    {
+        var left = this.visit(ctx.left);
+        var right = this.visit(ctx.right);
+
+        return left == right;
+    }
+    BasicVisitor.prototype.visitBoolGt = function(ctx)
+    {
+        var left = this.visit(ctx.left);
+        var right = this.visit(ctx.right);
+
+        return left > right;
+    }
+    BasicVisitor.prototype.visitBoolLt = function(ctx)
+    {
+        var left = this.visit(ctx.left);
+        var right = this.visit(ctx.right);
+
+        return left < right;
+    }
+    
+    // if/else
+    BasicVisitor.prototype.visitIf_fragment = function(ctx)
+    {
+        return this.visit(ctx.bool_expression());
+    }
+    BasicVisitor.prototype.visitElse_fragment = function(ctx)
+    {
+        this.visit(ctx.code_block());
+    }
+    BasicVisitor.prototype.visitIf_statement = function(ctx)
+    {
+        var elseFragment = ctx.else_fragment();
+        if (this.visit(ctx.if_fragment()) == true)
+        {
+            this.visit(ctx.code_block());
+        }
+        else if (elseFragment != null)
+        {
+            this.visit(ctx.else_fragment());
+        }
+    }
+
+    var visitor = new BasicVisitor();
+
+    var ErrorListener = function() 
+    {
+        antlr4.error.ErrorListener.call(this);
+            return this;
+    };
+    ErrorListener.prototype = Object.create(antlr4.error.ErrorListener.prototype);
+    ErrorListener.prototype.constructor = ErrorListener;
+    ErrorListener.prototype.syntaxError = function(recognizer, offendingSymbol, line, column, msg, e) 
+    {
+        var error = "Error at " + line + "," + column + ": " + msg + ".";
+
+        var output = document.getElementById("output");
+        output.innerHTML = output.innerHTML + ("<p><b>" + error + "</b></p>");
+    };
 
     function parse()
     {
@@ -34,6 +209,7 @@
         parser.buildParseTrees = true;
         var tree = parser.program();
 
+        visitor.visitProgram(tree);
         output.innerHTML += "<p>parsing complete</p>";
     }
 </script>
